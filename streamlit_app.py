@@ -51,29 +51,23 @@ if not st.session_state.logged_in:
             if st.button("Register"):
                 if new_u and new_p:
                     try:
-                        # Attempt to insert the new user
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
-                        # Clear inputs and show success
                         st.session_state["reg_u"] = ""
                         st.session_state["reg_p"] = ""
-                        st.success(f"Account for '{new_u}' created! You can now switch to the Login tab.")
+                        st.success(f"Account for '{new_u}' created! Switch to the Login tab.")
                         st.rerun()
 
                     except Exception as e:
-                        # 1. Check for the most common user error (Duplicate Username)
                         if "duplicate key" in str(e).lower():
-                            st.error(f"The username '{new_u}' is already taken. Please try another.")
-                        
-                        # 2. General user-friendly error for everyone else
+                            st.error(f"The username '{new_u}' is already taken.")
                         else:
                             st.error("Something went wrong during registration. Please try again later.")
                         
-                        # 3. ADMIN DEBUG LOGIC
-                        # We use .get() to avoid errors if 'username' isn't set yet
+                        # Admin Debug Info
                         if st.session_state.get("username") == "admin":
                             st.info(f"🛡️ Admin Dev Info: {e}")
                 else:
@@ -113,14 +107,28 @@ else:
             c1, c2, c3 = st.columns(3)
             tick = c1.text_input("Ticker").upper().strip()
             sh = c2.number_input("Shares", min_value=0.0)
-            ch = c3.number_input("Change %", format="%.2f")
-            if st.button("Save"):
+            ch = c3.number_input("Daily Change", format="%.2f")
+            
+            if st.button("Save Transaction"):
                 if tick:
-                    supabase.table("portfolio").insert({
-                        "username": st.session_state.username, "ticker": tick, 
-                        "shares": sh, "change": ch
-                    }).execute()
-                    st.rerun()
+                    try:
+                        supabase.table("portfolio").insert({
+                            "username": st.session_state.username, 
+                            "ticker": tick, 
+                            "shares": sh, 
+                            "change": ch
+                        }).execute()
+                        st.success(f"Successfully added {tick} to your portfolio!")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error("Unable to save transaction. Please try again.")
+                        
+                        # Admin Debug Info
+                        if st.session_state.get("username") == "admin":
+                            st.info(f"🛡️ Admin Dev Info: {e}")
+                else:
+                    st.warning("Please enter a Ticker symbol.")
 
         res = supabase.table("portfolio").select("*").eq("username", st.session_state.username).execute()
         df = pd.DataFrame(res.data)
