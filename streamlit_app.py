@@ -118,8 +118,6 @@ else:
             # 3. Dynamic User Rows
             for i, row in user_df.iterrows():
                 c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
-                
-                # Display Username
                 c1.write(f"**{row['username']}**")
                 
                 # Format Dates
@@ -129,15 +127,14 @@ else:
                 c2.write(join_date)
                 c3.write(login_date)
                 
-                # Action Button: Prevent admin from deleting themselves
+                # Delete logic for Admin
                 if row['username'] != "admin":
                     if c4.button("🗑️", key=f"del_{row['username']}"):
                         try:
-                            # IMPORTANT: Delete portfolio records first to avoid Foreign Key errors
+                            # Delete portfolio first to avoid Foreign Key errors
                             supabase.table("portfolio").delete().eq("username", row['username']).execute()
-                            # Delete the user
+                            # Delete user
                             supabase.table("users").delete().eq("username", row['username']).execute()
-                            
                             st.success(f"User {row['username']} deleted.")
                             st.rerun()
                         except Exception as e:
@@ -148,9 +145,14 @@ else:
         else:
             st.write("No users registered yet.")
 
-    # --- PORTFOLIO PAGE ---
+    # --- PORTFOLIO PAGE FOR REGULAR USERS ---
     else:
         st.title("📈 My Portfolio")
+        
+        # Password Reset Helper (Manual Admin Reset)
+        with st.expander("🔑 Forgot Password?"):
+            st.info("Password resets are handled manually for security. Please contact the administrator.")
+
         with st.expander("➕ Add Transaction"):
             c1, c2, c3 = st.columns(3)
             tick = c1.text_input("Ticker").upper().strip()
@@ -160,3 +162,29 @@ else:
             if st.button("Save Transaction"):
                 if tick:
                     try:
+                        supabase.table("portfolio").insert({
+                            "username": st.session_state.username, 
+                            "ticker": tick, 
+                            "shares": sh, 
+                            "change": ch
+                        }).execute()
+                        st.success(f"Successfully added {tick}!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Unable to save transaction.")
+                        if st.session_state.get("username") == "admin":
+                            st.info(f"🛡️ Admin Dev Info: {e}")
+                else:
+                    st.warning("Please enter a Ticker symbol.")
+
+        # Display Portfolio List
+        res = supabase.table("portfolio").select("*").eq("username", st.session_state.username).execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            st.divider()
+            for i, row in df.iterrows():
+                cols = st.columns([4, 2, 1])
+                cols[0].write(f"**{row['ticker']}** | {row['shares']:,} sh")
+                clr = "green" if row['change'] > 0 else "red"
+                cols[1].write(f":{clr}[{row['change']:+.2f}%]")
+                if cols[2].button("🗑️", key=f"p_{row['id
