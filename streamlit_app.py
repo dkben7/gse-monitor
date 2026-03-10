@@ -56,31 +56,37 @@ if not st.session_state.logged_in:
                         st.info(f"🛡️ Admin Dev Info: {e}")
         
         with tab2:
+            # We use the keys but don't try to manually overwrite them
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
             new_p = st.text_input("New Password", type="password", key="reg_p")
             
             if st.button("Register"):
                 if new_u and new_p:
                     try:
+                        # 1. Attempt the database insert
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
+                        # 2. Success! We notify the user
                         st.success(f"Success! Account '{new_u}' created. Switch to Login.")
-                        st.session_state["reg_u"] = ""
-                        st.session_state["reg_p"] = ""
-                        # No rerun here so you can see the success message
+                        
+                        # 3. Clean Slate: Rerunning clears the input widgets automatically
+                        st.rerun()
+
                     except Exception as e:
                         error_text = str(e).lower()
+                        # Handle the "Taken" case gracefully
                         if "duplicate key" in error_text:
-                            st.error("That username is already taken.")
+                            st.error(f"The username '{new_u}' is already taken. Please try another.")
                         else:
-                            # TEMPORARY: Show the real error to everyone so we can fix it
-                            st.error(f"Database Error: {e}")
+                            # Only show technical errors if the person is an admin
+                            st.error("Something went wrong during registration.")
+                            if st.session_state.get("username") == "admin":
+                                st.info(f"🛡️ Admin Dev Info: {e}")
                 else:
                     st.warning("Please fill in both fields.")
-
 # --- 4. THE DASHBOARD ---
 else:
     ADMIN_USERNAME = "admin" 
