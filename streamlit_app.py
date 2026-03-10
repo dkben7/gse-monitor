@@ -67,22 +67,19 @@ if not st.session_state.logged_in:
                             "password": make_hashes(new_p)
                         }).execute()
                         
+                        st.success(f"Success! Account '{new_u}' created. Switch to Login.")
                         st.session_state["reg_u"] = ""
                         st.session_state["reg_p"] = ""
-                        st.success(f"Account for '{new_u}' created! Switch to the Login tab.")
-                        st.rerun()
-
+                        # No rerun here so you can see the success message
                     except Exception as e:
-                        if "duplicate key" in str(e).lower():
-                            st.error(f"The username '{new_u}' is already taken.")
+                        error_text = str(e).lower()
+                        if "duplicate key" in error_text:
+                            st.error("That username is already taken.")
                         else:
-                            st.error("Something went wrong during registration. Please try again later.")
-                        
-                        # Admin Debug Info
-                        if st.session_state.get("username") == "admin":
-                            st.info(f"🛡️ Admin Dev Info: {e}")
+                            # TEMPORARY: Show the real error to everyone so we can fix it
+                            st.error(f"Database Error: {e}")
                 else:
-                    st.warning("Please fill in both fields to register.")
+                    st.warning("Please fill in both fields.")
 
 # --- 4. THE DASHBOARD ---
 else:
