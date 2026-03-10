@@ -20,7 +20,7 @@ st.markdown("""
 st.title("📊 GSE Smart Intelligence")
 
 # --- IMPORTANT: PASTE YOUR ACTUAL ID HERE ---
-SHEET_ID = "YOUR_ACTUAL_ID_FROM_URL" 
+SHEET_ID = "1_x73bJfJEJJGTZFsB1rzzM2oz0Yrxe5ViHQVvLhmEek" 
 
 # Base URL for the sheet
 BASE_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv"
