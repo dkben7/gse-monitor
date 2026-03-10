@@ -4,6 +4,7 @@ from supabase import create_client, Client
 import hashlib
 
 # --- 1. DATABASE CONNECTION ---
+# These pull from your Streamlit Cloud Secrets
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
@@ -14,6 +15,7 @@ def make_hashes(password):
 # --- 2. UI SETTINGS ---
 st.set_page_config(page_title="GSE Pro Monitor", layout="wide")
 
+# Custom CSS for better mobile/dark mode visibility
 st.markdown("""
     <style>
     .stApp { max-width: 900px; margin: 0 auto; }
@@ -60,6 +62,7 @@ if not st.session_state.logged_in:
 
 # --- 4. THE APP INTERIOR ---
 else:
+    # Set your admin username here
     ADMIN_USERNAME = "admin" 
     is_admin = st.session_state.username == ADMIN_USERNAME
 
@@ -75,7 +78,7 @@ else:
             st.session_state.logged_in = False
             st.rerun()
 
-    # --- ADMIN PANEL ---
+    # --- ADMIN PANEL PAGE ---
     if is_admin and page == "Admin Panel":
         st.title("🛡️ Admin Control Panel")
         user_res = supabase.table("users").select("username, created_at").execute()
@@ -93,9 +96,9 @@ else:
                         supabase.table("users").delete().eq("username", row['username']).execute()
                         st.rerun()
         else:
-            st.info("No registered users.")
+            st.info("No registered users found.")
 
-    # --- PORTFOLIO PAGE ---
+    # --- MY PORTFOLIO PAGE ---
     else:
         st.title("📈 My Portfolio")
         
@@ -112,7 +115,23 @@ else:
                         "shares": sh, 
                         "change": ch
                     }).execute()
-                    st.success(f"Added {tick}")
+                    st.success(f"Added {tick}!")
                     st.rerun()
 
-        res = supabase.table("portfolio").select("*").eq("
+        # Load Portfolio Data
+        res = supabase.table("portfolio").select("*").eq("username", st.session_state.username).execute()
+        df = pd.DataFrame(res.data)
+
+        if not df.empty:
+            df['ticker'] = df['ticker'].str.upper()
+            for i, row in df.iterrows():
+                with st.container():
+                    cols = st.columns([4, 2, 1])
+                    cols[0].write(f"**{row['ticker']}** | {row['shares']:,} shares")
+                    color = "green" if row['change'] > 0 else "red"
+                    cols[1].write(f":{color}[{row['change']:+.2f}%]")
+                    if cols[2].button("🗑️", key=f"p_del_{row['id']}"):
+                        supabase.table("portfolio").delete().eq("id", row['id']).execute()
+                        st.rerun()
+        else:
+            st.info("Your portfolio is currently empty.")
