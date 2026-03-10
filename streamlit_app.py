@@ -33,16 +33,27 @@ if not st.session_state.logged_in:
         tab1, tab2 = st.tabs(["Login", "Create Account"])
         
         with tab1:
-            u = st.text_input("Username", key="l_u").lower().strip()
-            p = st.text_input("Password", type="password", key="l_p")
+            u = st.text_input("Username", key="login_user").lower().strip()
+            p = st.text_input("Password", type="password", key="login_pass")
+            
             if st.button("Sign In"):
-                res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
-                if res.data:
-                    st.session_state.logged_in = True
-                    st.session_state.username = u
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials.")
+                try:
+                    res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
+                    if res.data:
+                        # NEW: Update the last_login timestamp in the database
+                        import datetime
+                        now = datetime.datetime.now().isoformat()
+                        supabase.table("users").update({"last_login": now}).eq("username", u).execute()
+                        
+                        st.session_state.logged_in = True
+                        st.session_state.username = u
+                        st.rerun()
+                    else:
+                        st.error("Invalid Username or Password")
+                except Exception as e:
+                    st.error("Login service unavailable.")
+                    if st.session_state.get("username") == "admin":
+                        st.info(f"🛡️ Admin Dev Info: {e}")
         
         with tab2:
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
