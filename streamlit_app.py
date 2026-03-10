@@ -98,20 +98,21 @@ else:
             st.rerun()
 
     if page == "Admin Panel" and is_admin:
-        st.title("🛡️ Admin Panel")
-        user_res = supabase.table("users").select("username, created_at").execute()
+        st.title("🛡️ Admin Control Panel")
+        user_res = supabase.table("users").select("username, created_at, last_login").execute()
         user_df = pd.DataFrame(user_res.data)
-        if not user_df.empty:
-            for i, row in user_df.iterrows():
-                c1, c2, c3 = st.columns([3, 3, 2])
-                c1.write(f"**{row['username']}**")
-                c2.write(f"Joined: {pd.to_datetime(row['created_at']).date()}")
-                if row['username'] != ADMIN_USERNAME:
-                    if c3.button("Delete", key=f"d_{row['username']}"):
-                        supabase.table("portfolio").delete().eq("username", row['username']).execute()
-                        supabase.table("users").delete().eq("username", row['username']).execute()
-                        st.rerun()
 
+        if not user_df.empty:
+            st.metric("Total Members", len(user_df))
+            
+            # Format the dates for a cleaner look
+            user_df['created_at'] = pd.to_datetime(user_df['created_at']).dt.strftime('%Y-%m-%d')
+            user_df['last_login'] = pd.to_datetime(user_df['last_login']).dt.strftime('%b %d, %H:%M')
+            
+            # Display as a clean table
+            st.table(user_df[['username', 'created_at', 'last_login']])
+        else:
+            st.write("No users registered yet.")
     else:
         st.title("📈 My Portfolio")
         with st.expander("➕ Add Transaction"):
