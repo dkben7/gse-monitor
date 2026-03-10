@@ -49,7 +49,7 @@ COUNTRY_DATA = {
 code_options = [f"{name} ({code})" for name, code in sorted(COUNTRY_DATA.items())]
 
 # --- 3. PAGE CONFIG & STATE ---
-st.set_page_config(page_title="GSE Intelligence", page_icon="🏦", layout="wide")
+st.set_page_config(page_title="GSE Intelligence", page_icon="🏦", layout="centered")
 st.title("🏦 GSE Intelligence")
 
 if 'logged_in' not in st.session_state:
@@ -61,14 +61,13 @@ if 'list_version' not in st.session_state:
 
 # --- 4. CALLBACK FUNCTIONS ---
 def handle_user_deletion(username_to_del):
-    """Deletes user data and triggers a clean rerun to reset widget states."""
     try:
         supabase.table("portfolio").delete().eq("username", username_to_del).execute()
         supabase.table("users").delete().eq("username", username_to_del).execute()
         st.session_state.list_version += 1
-        st.toast(f"✅ User '{username_to_del}' and their data removed.")
+        st.toast(f"✅ User '{username_to_del}' removed.")
     except Exception as e:
-        st.error(f"⚠️ Error during deletion: {e}")
+        st.error(f"⚠️ Error: {e}")
     st.rerun()
 
 # --- 5. AUTHENTICATION INTERFACE ---
@@ -76,31 +75,35 @@ if not st.session_state.logged_in:
     tab1, tab2 = st.tabs(["Login", "Create Account"])
     
     with tab1:
-        u = st.text_input("Username", key="login_u").lower().strip()
-        p = st.text_input("Password", type="password", key="login_p")
+        # Narrow columns used to center and shorten the input boxes
+        _, center_col, _ = st.columns([1, 2, 1])
         
-        col_login, col_forgot = st.columns([1, 4])
-        
-        if col_login.button("Sign In"):
-            res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
-            if res.data:
-                now = datetime.datetime.now().isoformat()
-                supabase.table("users").update({"last_login": now}).eq("username", u).execute()
-                st.session_state.logged_in = True
-                st.session_state.username = u
-                st.rerun()
-            else:
-                st.error("❌ Incorrect username or password.")
-        
-        with col_forgot.popover("Forgot Password?"):
-            st.write("### Reset Password")
-            st.info("For security, password resets are handled by the administrator.")
-            reset_user = st.text_input("Username for Reset Request").lower().strip()
-            if st.button("Submit Request"):
-                if reset_user:
-                    st.success(f"Request logged for {reset_user}. Contact Admin for verification.")
+        with center_col:
+            u = st.text_input("Username", key="login_u").lower().strip()
+            p = st.text_input("Password", type="password", key="login_p")
+            
+            if st.button("Sign In", use_container_width=True):
+                res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
+                if res.data:
+                    now = datetime.datetime.now().isoformat()
+                    supabase.table("users").update({"last_login": now}).eq("username", u).execute()
+                    st.session_state.logged_in = True
+                    st.session_state.username = u
+                    st.rerun()
                 else:
-                    st.warning("Please provide a username.")
+                    st.error("❌ Incorrect username or password.")
+            
+            # --- NEW: ITALICIZED FORGOT PASSWORD ---
+            st.write("") # Spacer
+            with st.popover("*Forgot Password?*", use_container_width=True):
+                st.write("### Reset Password")
+                st.info("Please contact the Administrator at support@gse-intel.com to reset your credentials.")
+                reset_user = st.text_input("Username").lower().strip()
+                if st.button("Submit Request"):
+                    if reset_user:
+                        st.success(f"Request logged for {reset_user}.")
+                    else:
+                        st.warning("Please enter your username.")
 
     with tab2:
         with st.form("reg_form", clear_on_submit=True):
@@ -116,9 +119,13 @@ if not st.session_state.logged_in:
 
             st.write("### Contact Details")
             c_cc, c_ph = st.columns([2, 3])
-            # Default to Ghana (+233) or United States (+1) if preferred
-            default_idx = sorted(COUNTRY_DATA.keys()).index("Ghana")
-            selected_country = c_cc.selectbox("Country Code", code_options, index=default_idx)
+            # Default to Ghana index if found
+            try:
+                def_idx = sorted(COUNTRY_DATA.keys()).index("Ghana")
+            except:
+                def_idx = 0
+            
+            selected_country = c_cc.selectbox("Country Code", code_options, index=def_idx)
             phone_body = c_ph.text_input("Phone Number")
             
             st.divider()
@@ -126,17 +133,13 @@ if not st.session_state.logged_in:
             new_u = st.text_input("New Username").lower().strip()
             new_p = st.text_input("New Password", type="password")
             
-            if st.form_submit_button("Register"):
-                # Other Name is the ONLY optional field
+            if st.form_submit_button("Register", use_container_width=True):
                 required = [f_name, l_name, email, phone_body, new_u, new_p]
                 if not all(required):
                     st.warning("All fields are required except 'Other Name'.")
                 else:
                     try:
-                        # Extract the code (e.g., +233) from the "Country (+Code)" string
                         phone_code = selected_country.split('(')[-1].strip(')')
-                        full_phone = f"{phone_code} {phone_body}"
-                        
                         user_data = {
                             "username": new_u,
                             "password": make_hashes(new_p),
@@ -145,29 +148,24 @@ if not st.session_state.logged_in:
                             "other_name": o_name if o_name else None,
                             "dob": str(dob),
                             "email": email,
-                            "phone_number": full_phone
+                            "phone_number": f"{phone_code} {phone_body}"
                         }
                         supabase.table("users").insert(user_data).execute()
-                        st.success("🎉 Account created! You can now log in.")
-                        st.balloons()
-                    except Exception as e:
-                        st.error("🚫 Registration failed. Username, Email, or Phone may already be registered.")
+                        st.success("🎉 Account created! Please log in.")
+                    except Exception:
+                        st.error("🚫 Registration failed. Data already exists.")
 
-# --- 6. MAIN APPLICATION CONTENT ---
+# --- 6. LOGGED IN CONTENT ---
 else:
     is_admin = (st.session_state.username == "admin")
-    st.sidebar.title(f"👋 {st.session_state.username}")
-    
-    # Navigation
+    st.sidebar.title(f"👋 Welcome, {st.session_state.username}")
     menu = ["My Portfolio", "Admin Panel"] if is_admin else ["My Portfolio"]
     page = st.sidebar.radio("Navigation", menu)
     
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
-        st.session_state.username = None
         st.rerun()
 
-    # --- ADMIN PANEL ---
     if page == "Admin Panel" and is_admin:
         st.subheader("🛡️ Admin Control Panel")
         user_res = supabase.table("users").select("*").execute()
@@ -176,7 +174,6 @@ else:
         if not user_df.empty:
             st.write(f"Total Members: **{len(user_df)}**")
             for i, row in user_df.iterrows():
-                # Build display name logic
                 full_display = f"{row['first_name']} {row['last_name']}"
                 if row.get('other_name'):
                     full_display = f"{row['first_name']} {row['other_name']} {row['last_name']}"
@@ -191,15 +188,10 @@ else:
                     col_b.write(f"**Last Login:** {last_seen}")
                     
                     if row['username'] != "admin":
-                        # Unique keys prevent "stale" open popovers
                         v = st.session_state.list_version
                         if st.button(f"🗑️ Delete User", key=f"del_{row['username']}_{v}", type="primary"):
                             handle_user_deletion(row['username'])
         else:
-            st.info("No registered users yet.")
-
-    # --- PORTFOLIO PAGE ---
+            st.info("No members found.")
     else:
-        st.subheader("📈 My Portfolio")
-        st.info("Portfolio management system active. Use the sidebar to navigate.")
-        # [Insert your existing Portfolio Transaction & Table logic here]
+        st.write("### 📈 Portfolio Dashboard")
