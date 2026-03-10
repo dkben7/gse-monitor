@@ -7,7 +7,7 @@ st.title("🇬🇭 GSE Smart Monitor")
 
 # --- SETTINGS ---
 # Replace this with your actual Sheet ID
-SHEET_ID = "1_70V_S-N_D-W_K_O_E_X_A_M_P_L_E" 
+SHEET_ID = "1_x73bJfJEJJGTZFsB1rzzM2oz0Yrxe5ViHQVvLhmEek" 
 
 PORTFOLIO_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Portfolio"
 DIVIDENDS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Dividends"
