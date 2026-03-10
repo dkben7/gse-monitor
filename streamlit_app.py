@@ -18,11 +18,14 @@ def get_data():
     p_df = pd.read_csv(PORTFOLIO_URL)
     d_df = pd.read_csv(DIVIDENDS_URL)
     
+    # Standardize column names (lowercase and strip spaces)
+    p_df.columns = p_df.columns.str.lower().str.strip()
+    d_df.columns = d_df.columns.str.lower().str.strip()
+    
     # --- CLEANING LOGIC ---
-    # Convert 'Change' column to string and fix brackets
-    # Using .iloc[:, 2] assumes 'Change' is your 3rd column (A=0, B=1, C=2)
-    p_df['Clean_Change'] = p_df.iloc[:, 2].astype(str).str.replace('(', '-', regex=False).str.replace(')', '', regex=False)
-    p_df['Clean_Change'] = pd.to_numeric(p_df['Clean_Change'], errors='coerce').fillna(0)
+    # Using iloc to target the 3rd column safely for the Change
+    p_df['clean_change'] = p_df.iloc[:, 2].astype(str).str.replace('(', '-', regex=False).str.replace(')', '', regex=False)
+    p_df['clean_change'] = pd.to_numeric(p_df['clean_change'], errors='coerce').fillna(0)
     
     return p_df, d_df
 
@@ -38,13 +41,13 @@ try:
 
     with col1:
         st.subheader("🚀 Top Gainers")
-        gainers = portfolio[portfolio['Clean_Change'] > 0].nlargest(5, 'Clean_Change')
+        gainers = portfolio['clean_change'] > 0].nlargest(5, 'Clean_Change')
         st.dataframe(gainers[['Ticker', 'Clean_Change']], hide_index=True)
 
     with col2:
         st.subheader("📉 Top Losers")
         # Same "Absolute Value" logic: finds numbers that aren't positive or zero
-        losers = portfolio[portfolio['Clean_Change'] < 0].nsmallest(5, 'Clean_Change')
+        losers = portfolio['clean_change'] < 0].nsmallest(5, 'Clean_Change')
         st.dataframe(losers[['Ticker', 'Clean_Change']], hide_index=True)
 
     with col3:
