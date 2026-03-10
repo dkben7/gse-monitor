@@ -47,18 +47,33 @@ if not st.session_state.logged_in:
                     st.error("Invalid credentials.")
         
         with tab2:
+            # We add an on_change to clear messages when the user types
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
             new_p = st.text_input("New Password", type="password", key="reg_p")
+            
             if st.button("Register"):
-                if new_u and new_p:
-                    try:
-                        supabase.table("users").insert({"username": new_u, "password": make_hashes(new_p)}).execute()
-                        st.session_state["reg_u"] = ""
-                        st.session_state["reg_p"] = ""
-                        st.success("Account created! You can now Login.")
-                        st.rerun()
-                    except:
-                        st.error("Username taken.")
+                if not new_u or not new_p:
+                    st.warning("Please fill in both fields.")
+                else:
+                    # Check if username exists before trying to insert
+                    check = supabase.table("users").select("username").eq("username", new_u).execute()
+                    
+                    if len(check.data) > 0:
+                        st.error(f"Username '{new_u}' is already taken. Please try another.")
+                    else:
+                        try:
+                            supabase.table("users").insert({
+                                "username": new_u, 
+                                "password": make_hashes(new_p)
+                            }).execute()
+                            
+                            # Success! Clear the session state
+                            st.session_state["reg_u"] = ""
+                            st.session_state["reg_p"] = ""
+                            st.success("Account created successfully! You can now switch to the Login tab.")
+                            # No st.rerun here allows the success message to stay visible
+                        except Exception as e:
+                            st.error("An unexpected error occurred. Please try again.")
 
 # --- 4. THE APP INTERIOR ---
 else:
