@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 import hashlib
+import datetime
 
 # 1. Database Connection
 url = st.secrets["SUPABASE_URL"]
@@ -31,10 +32,10 @@ if not st.session_state.logged_in:
         
         if st.button("Sign In"):
             try:
+                # Select user where username and hashed password match
                 res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
                 if res.data:
-                    # Update Last Login
-                    import datetime
+                    # Update Last Login Timestamp
                     now = datetime.datetime.now().isoformat()
                     supabase.table("users").update({"last_login": now}).eq("username", u).execute()
                     
@@ -45,11 +46,12 @@ if not st.session_state.logged_in:
                     st.error("Invalid Username or Password")
             except Exception as e:
                 st.error("Login service unavailable.")
-                if st.session_state.get("username") == "admin":
+                # Dev info only for the admin user (if they could log in)
+                if u == "admin":
                     st.info(f"Dev Info: {e}")
 
     with tab2:
-        # Form handles the "clear_on_submit" automatically
+        # Form handles the "clear_on_submit" automatically to reset boxes
         with st.form("registration_form", clear_on_submit=True):
             st.write("### Create a New Account")
             new_u = st.text_input("New Username").lower().strip()
@@ -70,41 +72,9 @@ if not st.session_state.logged_in:
                         st.error("That username is already taken.")
                     else:
                         st.error("Registration failed. Please try again.")
+            else:
+                st.warning("Please fill in both fields.")
 
 # --- LOGGED IN CONTENT ---
 else:
-    is_admin = (st.session_state.username == "admin")
-    
-    # Sidebar Navigation
-    st.sidebar.title(f"👋 Welcome, {st.session_state.username}")
-    menu = ["My Portfolio"]
-    if is_admin:
-        menu.append("Admin Panel")
-    
-    page = st.sidebar.radio("Navigation", menu)
-    
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.username = None
-        st.rerun()
-
-    # --- ADMIN PANEL ---
-    if page == "Admin Panel" and is_admin:
-        st.title("🛡️ Admin Control Panel")
-        user_res = supabase.table("users").select("username, created_at, last_login").execute()
-        user_df = pd.DataFrame(user_res.data)
-
-        if not user_df.empty:
-            st.metric("Total Members", len(user_df))
-            h1, h2, h3, h4 = st.columns([2, 2, 2, 1])
-            h1.write("**Username**")
-            h2.write("**Joined**")
-            h3.write("**Last Login**")
-            h4.write("**Action**")
-            st.divider()
-
-            for i, row in user_df.iterrows():
-                c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
-                c1.write(row['username'])
-                
-                join_date = pd.to_datetime(row['created_at']).strftime('%
+    is_admin = (st.session_state.
