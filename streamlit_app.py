@@ -56,34 +56,38 @@ if not st.session_state.logged_in:
                         st.info(f"🛡️ Admin Dev Info: {e}")
         
         with tab2:
+            # 1. Create the input fields
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
-            new_p = st.text_input("New Password", type="password", key="reg_p")
+            new_p = st.text_input("New Password", key="reg_p", type="password")
             
             if st.button("Register"):
                 if new_u and new_p:
                     try:
-                        # 1. Save to Database
+                        # 2. Attempt the database insert
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
-                        st.success(f"Account for '{new_u}' created! Switch to the Login tab.")
-
-                        # 2. CLEAR THE WIDGETS
-                        # Deleting the keys from session state resets the text_input boxes
-                        del st.session_state["reg_u"]
-                        del st.session_state["reg_p"]
-
-                        # 3. Refresh to show empty boxes
+                        # 3. Use a toast or session state to persist the success message
+                        st.toast(f"✅ Account '{new_u}' created successfully!")
+                        st.success("Account created! You can now switch to the Login tab.")
+                        
+                        # 4. Clear the internal widget memory
+                        st.session_state["reg_u"] = ""
+                        st.session_state["reg_p"] = ""
+                        
+                        # 5. Rerun to refresh the UI with empty boxes
                         st.rerun()
 
                     except Exception as e:
-                        if "duplicate key" in str(e).lower():
-                            st.error(f"The username '{new_u}' is already taken.")
+                        error_text = str(e).lower()
+                        if "duplicate key" in error_text:
+                            st.error(f"The username '{new_u}' is already taken. Please try another.")
                         else:
-                            st.error("Registration failed. Please try again.")
+                            st.error("Something went wrong during registration.")
                         
+                        # Admin Debug
                         if st.session_state.get("username") == "admin":
                             st.info(f"🛡️ Admin Dev Info: {e}")
                 else:
