@@ -3,6 +3,9 @@ import pandas as pd
 from supabase import create_client, Client
 import hashlib
 
+if st.button("Reset App (Debug)"):
+    st.session_state.logged_in = False
+    st.rerun()
 # --- 1. DATABASE CONNECTION ---
 # These pull directly from the Secrets you just saved!
 url = st.secrets["SUPABASE_URL"]
