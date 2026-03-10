@@ -34,7 +34,6 @@ if not st.session_state.logged_in:
             try:
                 res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
                 if res.data:
-                    # Update Last Login Timestamp
                     now = datetime.datetime.now().isoformat()
                     supabase.table("users").update({"last_login": now}).eq("username", u).execute()
                     
@@ -47,7 +46,6 @@ if not st.session_state.logged_in:
                 st.error("Login service unavailable.")
 
     with tab2:
-        # st.form handles UI clearing automatically without errors
         with st.form("registration_form", clear_on_submit=True):
             st.write("### Create a New Account")
             new_u = st.text_input("New Username").lower().strip()
@@ -97,7 +95,6 @@ else:
         if not user_df.empty:
             st.metric("Total Members", len(user_df))
             
-            # Header Columns (Fixes NameError: h1, h2 not defined)
             h1, h2, h3, h4 = st.columns([2, 2, 2, 1])
             h1.write("**Username**")
             h2.write("**Joined**")
@@ -109,7 +106,6 @@ else:
                 c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
                 c1.write(f"**{row['username']}**")
                 
-                # Format dates safely
                 join_date = pd.to_datetime(row['created_at']).strftime('%Y-%m-%d')
                 last_seen = pd.to_datetime(row['last_login']).strftime('%b %d, %H:%M') if pd.notnull(row['last_login']) else "Never"
                 
@@ -117,16 +113,17 @@ else:
                 c3.write(last_seen)
                 
                 if row['username'] != "admin":
-                    if c4.button("🗑️", key=f"del_{row['username']}"):
-                        try:
-                            # 1. Clear user portfolio (Foreign Key safety)
-                            supabase.table("portfolio").delete().eq("username", row['username']).execute()
-                            # 2. Delete user
-                            supabase.table("users").delete().eq("username", row['username']).execute()
-                            st.success(f"User {row['username']} deleted.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error("Delete failed.")
+                    # NEW: Popover for deletion confirmation
+                    with c4.popover("🗑️"):
+                        st.write(f"Delete **{row['username']}**?")
+                        if st.button("Yes, delete", key=f"conf_del_{row['username']}"):
+                            try:
+                                supabase.table("portfolio").delete().eq("username", row['username']).execute()
+                                supabase.table("users").delete().eq("username", row['username']).execute()
+                                st.success(f"User {row['username']} deleted.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error("Delete failed.")
                 else:
                     c4.write("👑")
         else:
@@ -148,7 +145,6 @@ else:
             if st.button("Save Transaction"):
                 if tick:
                     try:
-                        # Fixed SyntaxError: Properly closed dictionary
                         supabase.table("portfolio").insert({
                             "username": st.session_state.username, 
                             "ticker": tick, 
@@ -172,9 +168,13 @@ else:
                 cols[0].write(f"**{row['ticker']}** | {row['shares']:,} sh")
                 clr = "green" if row['change'] > 0 else "red"
                 cols[1].write(f":{clr}[{row['change']:+.2f}%]")
-                if cols[2].button("🗑️", key=f"p_{row['id']}"):
-                    try:
-                        supabase.table("portfolio").delete().eq("id", row['id']).execute()
-                        st.rerun()
-                    except Exception as e:
-                        st.error("Could not delete stock.")
+                
+                # NEW: Popover for stock deletion confirmation
+                with cols[2].popover("🗑️"):
+                    st.write("Delete stock?")
+                    if st.button("Yes", key=f"conf_p_{row['id']}"):
+                        try:
+                            supabase.table("portfolio").delete().eq("id", row['id']).execute()
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Could not delete stock.")
