@@ -33,27 +33,21 @@ if not st.session_state.logged_in:
         tab1, tab2 = st.tabs(["Login", "Create Account"])
         
         with tab1:
-            u = st.text_input("Username", key="login_user").lower().strip()
-            p = st.text_input("Password", type="password", key="login_pass")
+            u = st.text_input("Username", key="l_u").lower().strip()
+            p = st.text_input("Password", type="password", key="l_p")
             
             if st.button("Sign In"):
-                try:
-                    res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
-                    if res.data:
-                        # NEW: Update the last_login timestamp in the database
-                        import datetime
-                        now = datetime.datetime.now().isoformat()
-                        supabase.table("users").update({"last_login": now}).eq("username", u).execute()
-                        
-                        st.session_state.logged_in = True
-                        st.session_state.username = u
-                        st.rerun()
-                    else:
-                        st.error("Invalid Username or Password")
-                except Exception as e:
-                    st.error("Login service unavailable.")
-                    if st.session_state.get("username") == "admin":
-                        st.info(f"🛡️ Admin Dev Info: {e}")
+                # ... (your existing login logic) ...
+                pass
+
+            # Forgot Password logic
+            st.divider()
+            with st.expander("🔑 Forgot Password?"):
+                st.write("For security, password resets are handled manually.")
+                st.info("Please contact the administrator (admin@youruniversity.edu) to reset your credentials.")
+                
+                # Optional: A 'Secret' way for the admin to reset it via code
+                st.caption("Admin: You can reset passwords directly in the Supabase Table Editor by updating the 'password' column with a new hash.")
         
         with tab2:
             # We use a form with clear_on_submit=True
@@ -105,20 +99,56 @@ else:
 
     if page == "Admin Panel" and is_admin:
         st.title("🛡️ Admin Control Panel")
+        
+        # 1. Fetch User Data
         user_res = supabase.table("users").select("username, created_at, last_login").execute()
         user_df = pd.DataFrame(user_res.data)
 
         if not user_df.empty:
             st.metric("Total Members", len(user_df))
             
-            # Format the dates for a cleaner look
-            user_df['created_at'] = pd.to_datetime(user_df['created_at']).dt.strftime('%Y-%m-%d')
-            user_df['last_login'] = pd.to_datetime(user_df['last_login']).dt.strftime('%b %d, %H:%M')
-            
-            # Display as a clean table
-            st.table(user_df[['username', 'created_at', 'last_login']])
+            # 2. Table Header
+            h1, h2, h3, h4 = st.columns([2, 2, 2, 1])
+            h1.write("**Username**")
+            h2.write("**Joined**")
+            h3.write("**Last Login**")
+            h4.write("**Action**")
+            st.divider()
+
+            # 3. Dynamic User Rows
+            for i, row in user_df.iterrows():
+                c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+                
+                # Display Username
+                c1.write(f"**{row['username']}**")
+                
+                # Format Dates
+                join_date = pd.to_datetime(row['created_at']).strftime('%Y-%m-%d')
+                login_date = pd.to_datetime(row['last_login']).strftime('%b %d, %H:%M') if row['last_login'] else "Never"
+                
+                c2.write(join_date)
+                c3.write(login_date)
+                
+                # Action Button: Prevent admin from deleting themselves
+                if row['username'] != "admin":
+                    if c4.button("🗑️", key=f"del_{row['username']}"):
+                        try:
+                            # IMPORTANT: Delete portfolio records first to avoid Foreign Key errors
+                            supabase.table("portfolio").delete().eq("username", row['username']).execute()
+                            # Delete the user
+                            supabase.table("users").delete().eq("username", row['username']).execute()
+                            
+                            st.success(f"User {row['username']} deleted.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Delete failed.")
+                            st.info(f"Dev Info: {e}")
+                else:
+                    c4.write("👑")
         else:
             st.write("No users registered yet.")
+
+    # --- PORTFOLIO PAGE ---
     else:
         st.title("📈 My Portfolio")
         with st.expander("➕ Add Transaction"):
@@ -130,32 +160,3 @@ else:
             if st.button("Save Transaction"):
                 if tick:
                     try:
-                        supabase.table("portfolio").insert({
-                            "username": st.session_state.username, 
-                            "ticker": tick, 
-                            "shares": sh, 
-                            "change": ch
-                        }).execute()
-                        st.success(f"Successfully added {tick} to your portfolio!")
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error("Unable to save transaction. Please try again.")
-                        
-                        # Admin Debug Info
-                        if st.session_state.get("username") == "admin":
-                            st.info(f"🛡️ Admin Dev Info: {e}")
-                else:
-                    st.warning("Please enter a Ticker symbol.")
-
-        res = supabase.table("portfolio").select("*").eq("username", st.session_state.username).execute()
-        df = pd.DataFrame(res.data)
-        if not df.empty:
-            for i, row in df.iterrows():
-                cols = st.columns([4, 2, 1])
-                cols[0].write(f"**{row['ticker']}** | {row['shares']:,} sh")
-                clr = "green" if row['change'] > 0 else "red"
-                cols[1].write(f":{clr}[{row['change']:+.2f}%]")
-                if cols[2].button("🗑️", key=f"p_{row['id']}"):
-                    supabase.table("portfolio").delete().eq("id", row['id']).execute()
-                    st.rerun()
