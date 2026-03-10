@@ -14,7 +14,6 @@ def make_hashes(password):
 # --- 2. UI SETTINGS ---
 st.set_page_config(page_title="GSE Pro Monitor", layout="wide")
 
-# Custom Styling
 st.markdown("""
     <style>
     .stApp { max-width: 900px; margin: 0 auto; }
@@ -61,13 +60,11 @@ if not st.session_state.logged_in:
 
 # --- 4. THE APP INTERIOR ---
 else:
-    # Set your admin username here
     ADMIN_USERNAME = "admin" 
     is_admin = st.session_state.username == ADMIN_USERNAME
 
     with st.sidebar:
         st.header(f"👋 {st.session_state.username.title()}")
-        # Page navigation for Admin
         if is_admin:
             page = st.radio("Navigation", ["My Portfolio", "Admin Panel"])
         else:
@@ -78,7 +75,7 @@ else:
             st.session_state.logged_in = False
             st.rerun()
 
-    # ADMIN PANEL PAGE
+    # --- ADMIN PANEL ---
     if is_admin and page == "Admin Panel":
         st.title("🛡️ Admin Control Panel")
         user_res = supabase.table("users").select("username, created_at").execute()
@@ -88,4 +85,34 @@ else:
             st.metric("Total Users", len(user_df))
             for i, row in user_df.iterrows():
                 c1, c2, c3 = st.columns([3, 3, 2])
-                c1.write(f"**{row
+                c1.write(f"**{row['username']}**")
+                c2.write(f"Joined: {pd.to_datetime(row['created_at']).date()}")
+                if row['username'] != ADMIN_USERNAME:
+                    if c3.button("Delete", key=f"del_u_{row['username']}"):
+                        supabase.table("portfolio").delete().eq("username", row['username']).execute()
+                        supabase.table("users").delete().eq("username", row['username']).execute()
+                        st.rerun()
+        else:
+            st.info("No registered users.")
+
+    # --- PORTFOLIO PAGE ---
+    else:
+        st.title("📈 My Portfolio")
+        
+        with st.expander("➕ Add Transaction"):
+            c1, c2, c3 = st.columns(3)
+            tick = c1.text_input("Ticker").upper().strip()
+            sh = c2.number_input("Shares", min_value=0.0)
+            ch = c3.number_input("Daily Change", format="%.2f")
+            if st.button("Save Transaction"):
+                if tick:
+                    supabase.table("portfolio").insert({
+                        "username": st.session_state.username, 
+                        "ticker": tick, 
+                        "shares": sh, 
+                        "change": ch
+                    }).execute()
+                    st.success(f"Added {tick}")
+                    st.rerun()
+
+        res = supabase.table("portfolio").select("*").eq("
