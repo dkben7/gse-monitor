@@ -56,51 +56,39 @@ if not st.session_state.logged_in:
                         st.info(f"🛡️ Admin Dev Info: {e}")
         
         with tab2:
-            # We initialize a 'clear' state if it doesn't exist
-            if "reg_success" not in st.session_state:
-                st.session_state.reg_success = False
-
-            # These fields will now properly clear because we manually set their state
-            new_u = st.text_input("New Username", key="reg_u").lower().strip()
-            new_p = st.text_input("New Password", key="reg_p", type="password")
+            # We use a form with clear_on_submit=True
+            # This is the only 100% reliable way to empty boxes in Streamlit
+            with st.form("registration_form", clear_on_submit=True):
+                st.write("### Create a New Account")
+                new_u = st.text_input("New Username").lower().strip()
+                new_p = st.text_input("New Password", type="password")
+                submit_reg = st.form_submit_button("Register")
             
-            if st.button("Register"):
+            if submit_reg:
                 if new_u and new_p:
                     try:
-                        # 1. Database Save
+                        # 1. Attempt the database insert
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
-                        # 2. Update state to trigger UI changes
-                        st.session_state.reg_success = True
+                        # 2. Success Feedback
+                        st.success(f"Success! Account '{new_u}' created. You can now switch to the Login tab.")
+                        st.balloons() # Visual confirmation that survives the state change
                         
-                        # 3. Use Toast for persistent feedback
-                        st.toast(f"✅ Account {new_u} created!")
-                        
-                        # 4. Clear the text boxes manually
-                        st.session_state["reg_u"] = ""
-                        st.session_state["reg_p"] = ""
-                        
-                        # 5. Rerun to show the clean UI
-                        st.rerun()
-
                     except Exception as e:
-                        if "duplicate key" in str(e).lower():
-                            st.error(f"The username '{new_u}' is already taken.")
+                        error_text = str(e).lower()
+                        if "duplicate key" in error_text:
+                            st.error(f"The username '{new_u}' is already taken. Please try another.")
                         else:
-                            # We check if the user actually exists now to avoid false errors
-                            st.error("Registration encountered a UI refresh issue.")
+                            st.error("Registration failed. Please try again.")
                         
+                        # Admin Debug
                         if st.session_state.get("username") == "admin":
                             st.info(f"🛡️ Admin Dev Info: {e}")
-            
-            # This keeps the success message visible AFTER the rerun
-            if st.session_state.reg_success:
-                st.success("Account created! You can now switch to the Login tab.")
-                # Reset the flag after showing the message once
-                st.session_state.reg_success = False
+                else:
+                    st.warning("Please fill in both fields.")
                     
 # --- 4. THE DASHBOARD ---
 else:
