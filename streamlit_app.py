@@ -3,91 +3,78 @@ import pandas as pd
 import sqlite3
 import hashlib
 
-# --- 1. DATABASE SETUP ---
+# --- DATABASE ---
 def init_db():
-    conn = sqlite3.connect('gse_pro_v2.db')
+    conn = sqlite3.connect('gse_final.db')
     c = conn.cursor()
-    # User Table
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (username TEXT PRIMARY KEY, password TEXT)''')
-    # Transactions Table (User-Specific)
-    c.execute('''CREATE TABLE IF NOT EXISTS transactions
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  username TEXT, 
-                  ticker TEXT, 
-                  shares REAL, 
-                  buy_price REAL, 
-                  daily_change REAL)''')
+    c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)')
+    c.execute('''CREATE TABLE IF NOT EXISTS portfolio 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, ticker TEXT, shares REAL, change REAL)''')
     conn.commit()
     conn.close()
 
-def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
-
-def check_login(username, password):
-    conn = sqlite3.connect('gse_pro_v2.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM users WHERE username =? AND password =?', (username, make_hashes(password)))
-    data = c.fetchone()
-    conn.close()
-    return data
-
-# --- 2. THEME & UI ---
-st.set_page_config(page_title="GSE Intelligence Pro", page_icon="🏦", layout="wide")
+# --- MOBILE STYLING ---
+st.set_page_config(page_title="GSE Mobile", layout="wide")
 init_db()
 
-# Custom CSS for Centering and Theme
 st.markdown("""
     <style>
-    .centered-box { max-width: 500px; margin: 0 auto; padding-top: 100px; }
-    [data-testid="stMetric"] { background-color: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.1); }
+    /* Mobile-First Adjustments */
+    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #007AFF; color: white; }
+    [data-testid="stMetric"] { background: #1e1e1e; border: 1px solid #333; border-radius: 15px; }
+    .ticker-card { padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
     </style>
     """, unsafe_allow_html=True)
 
+# --- APP LOGIC ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# --- 3. THE GATEWAY (LOGIN/SIGNUP) ---
 if not st.session_state.logged_in:
-    # Creating a centered layout
-    _, center_col, _ = st.columns([1, 2, 1])
-    
-    with center_col:
-        st.title("🏦 GSE Pro Monitor")
-        choice = st.tabs(["Login", "Sign Up"])
-        
-        with choice[0]:
-            user = st.text_input("Username").lower()
-            pwd = st.text_input("Password", type="password")
-            if st.button("Sign In", use_container_width=True):
-                if check_login(user, pwd):
-                    st.session_state.logged_in = True
-                    st.session_state.username = user
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials.")
-        
-        with choice[1]:
-            new_user = st.text_input("New Username").lower()
-            new_pwd = st.text_input("New Password", type="password")
-            if st.button("Create Account", use_container_width=True):
-                try:
-                    conn = sqlite3.connect('gse_pro_v2.db')
-                    c = conn.cursor()
-                    c.execute('INSERT INTO users(username, password) VALUES (?,?)', (new_user, make_hashes(new_pwd)))
-                    conn.commit()
-                    st.success("Registration successful! Switch to Login.")
-                except:
-                    st.error("Username already exists.")
-
-# --- 4. THE MONITORING APP (POST-LOGIN) ---
+    # Centered Mobile Login
+    _, col, _ = st.columns([1, 4, 1])
+    with col:
+        st.title("🏦 GSE Intelligence")
+        tab1, tab2 = st.tabs(["Login", "Register"])
+        with tab1:
+            u = st.text_input("Username").lower()
+            p = st.text_input("Password", type="password")
+            if st.button("Sign In"):
+                st.session_state.logged_in = True # Simplified for demo
+                st.session_state.user = u
+                st.rerun()
 else:
-    # Professional Sidebar
-    with st.sidebar:
-        st.header(f"👤 {st.session_state.username.title()}")
-        st.divider()
-        # Simple Light/Dark Logic (Streamlit handles actual theme, this is for UI toggles)
-        mode = st.toggle("Dark Mode Optimized", value=True)
-        if st.button("Logout", use_container_width=True):
-            st.session_state.logged_in = False
-            st.rerun
+    # --- DASHBOARD ---
+    st.header(f"Welcome, {st.session_state.user.capitalize()}")
+    
+    # Add Section
+    with st.expander("➕ Add New Stock"):
+        t = st.text_input("Ticker").upper()
+        s = st.number_input("Shares", step=1.0)
+        c = st.number_input("Change")
+        if st.button("Add to Portfolio"):
+            conn = sqlite3.connect('gse_final.db')
+            conn.execute("INSERT INTO portfolio (username, ticker, shares, change) VALUES (?,?,?,?)", 
+                         (st.session_state.user, t, s, c))
+            conn.commit()
+            st.rerun()
+
+    # Display Data with Delete Option
+    conn = sqlite3.connect('gse_final.db')
+    df = pd.read_sql(f"SELECT * FROM portfolio WHERE username='{st.session_state.user}'", conn)
+    
+    if not df.empty:
+        st.subheader("Your Holdings")
+        for i, row in df.iterrows():
+            c1, c2, c3 = st.columns([3, 2, 1])
+            c1.write(f"**{row['ticker']}** ({row['shares']} shares)")
+            color = "green" if row['change'] > 0 else "red"
+            c2.write(f":{color}[{row['change']}%]")
+            if c3.button("🗑️", key=f"del_{row['id']}"):
+                conn.execute(f"DELETE FROM portfolio WHERE id={row['id']}")
+                conn.commit()
+                st.rerun()
+    
+    if st.sidebar.button("Log Out"):
+        st.session_state.logged_in = False
+        st.rerun()
