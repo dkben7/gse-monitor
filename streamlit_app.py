@@ -1,80 +1,110 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
+from supabase import create_client, Client
 import hashlib
 
-# --- DATABASE ---
-def init_db():
-    conn = sqlite3.connect('gse_final.db')
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)')
-    c.execute('''CREATE TABLE IF NOT EXISTS portfolio 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, ticker TEXT, shares REAL, change REAL)''')
-    conn.commit()
-    conn.close()
+# --- 1. DATABASE CONNECTION ---
+# These pull directly from the Secrets you just saved!
+url = st.secrets["SUPABASE_URL"]
+key = st.secrets["SUPABASE_KEY"]
+supabase: Client = create_client(url, key)
 
-# --- MOBILE STYLING ---
-st.set_page_config(page_title="GSE Mobile", layout="wide")
-init_db()
+def make_hashes(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
 
+# --- 2. UI SETTINGS ---
+st.set_page_config(page_title="GSE Pro Monitor", layout="wide")
+
+# Custom CSS for Mobile-Friendly look
 st.markdown("""
     <style>
-    /* Mobile-First Adjustments */
-    .stButton>button { width: 100%; border-radius: 20px; height: 3em; background-color: #007AFF; color: white; }
-    [data-testid="stMetric"] { background: #1e1e1e; border: 1px solid #333; border-radius: 15px; }
-    .ticker-card { padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+    .stApp { max-width: 800px; margin: 0 auto; }
+    [data-testid="stMetric"] { background-color: #1e1e1e; border-radius: 10px; padding: 15px; border: 1px solid #333; }
+    .stButton>button { width: 100%; border-radius: 20px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- APP LOGIC ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
+# --- 3. CENTERED LOGIN PAGE ---
 if not st.session_state.logged_in:
-    # Centered Mobile Login
     _, col, _ = st.columns([1, 4, 1])
     with col:
         st.title("🏦 GSE Intelligence")
-        tab1, tab2 = st.tabs(["Login", "Register"])
+        tab1, tab2 = st.tabs(["Login", "Create Account"])
+        
         with tab1:
-            u = st.text_input("Username").lower()
+            u = st.text_input("Username").lower().strip()
             p = st.text_input("Password", type="password")
             if st.button("Sign In"):
-                st.session_state.logged_in = True # Simplified for demo
-                st.session_state.user = u
-                st.rerun()
+                res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
+                if res.data:
+                    st.session_state.logged_in = True
+                    st.session_state.username = u
+                    st.rerun()
+                else:
+                    st.error("Invalid Username or Password")
+        
+        with tab2:
+            new_u = st.text_input("New Username").lower().strip()
+            new_p = st.text_input("New Password", type="password")
+            if st.button("Register"):
+                try:
+                    supabase.table("users").insert({"username": new_u, "password": make_hashes(new_p)}).execute()
+                    st.success("Account created! You can now login.")
+                except:
+                    st.error("Username already taken.")
+
+# --- 4. THE MAIN DASHBOARD ---
 else:
-    # --- DASHBOARD ---
-    st.header(f"Welcome, {st.session_state.user.capitalize()}")
-    
-    # Add Section
-    with st.expander("➕ Add New Stock"):
-        t = st.text_input("Ticker").upper()
-        s = st.number_input("Shares", step=1.0)
-        c = st.number_input("Change")
-        if st.button("Add to Portfolio"):
-            conn = sqlite3.connect('gse_final.db')
-            conn.execute("INSERT INTO portfolio (username, ticker, shares, change) VALUES (?,?,?,?)", 
-                         (st.session_state.user, t, s, c))
-            conn.commit()
+    with st.sidebar:
+        st.write(f"Logged in as: **{st.session_state.username.title()}**")
+        if st.button("Log Out"):
+            st.session_state.logged_in = False
             st.rerun()
 
-    # Display Data with Delete Option
-    conn = sqlite3.connect('gse_final.db')
-    df = pd.read_sql(f"SELECT * FROM portfolio WHERE username='{st.session_state.user}'", conn)
-    
-    if not df.empty:
-        st.subheader("Your Holdings")
-        for i, row in df.iterrows():
-            c1, c2, c3 = st.columns([3, 2, 1])
-            c1.write(f"**{row['ticker']}** ({row['shares']} shares)")
-            color = "green" if row['change'] > 0 else "red"
-            c2.write(f":{color}[{row['change']}%]")
-            if c3.button("🗑️", key=f"del_{row['id']}"):
-                conn.execute(f"DELETE FROM portfolio WHERE id={row['id']}")
-                conn.commit()
+    st.title("📈 Portfolio Dashboard")
+
+    # Add Stock Section
+    with st.expander("➕ Add New Transaction"):
+        c1, c2, c3 = st.columns(3)
+        tick = c1.text_input("Ticker (e.g. MTN)").upper().strip()
+        sh = c2.number_input("Shares", min_value=0.0)
+        ch = c3.number_input("Daily Change %", format="%.2f")
+        
+        if st.button("Save to Cloud"):
+            if tick:
+                supabase.table("portfolio").insert({
+                    "username": st.session_state.username,
+                    "ticker": tick,
+                    "shares": sh,
+                    "change": ch
+                }).execute()
+                st.success(f"Added {tick}!")
                 st.rerun()
-    
-    if st.sidebar.button("Log Out"):
-        st.session_state.logged_in = False
-        st.rerun()
+
+    # Load Data
+    res = supabase.table("portfolio").select("*").eq("username", st.session_state.username).execute()
+    df = pd.DataFrame(res.data)
+
+    if not df.empty:
+        # Filter Ghost Zeros & Capitalize
+        df = df[df['change'] != 0]
+        df['ticker'] = df['ticker'].str.title()
+
+        st.subheader("Current Holdings")
+        for i, row in df.iterrows():
+            with st.container():
+                cols = st.columns([3, 2, 1])
+                cols[0].write(f"**{row['ticker']}**")
+                cols[0].caption(f"{row['shares']:,} shares")
+                
+                color = "green" if row['change'] > 0 else "red"
+                cols[1].write(f":{color}[{row['change']:+.2f}%]")
+                
+                if cols[2].button("🗑️", key=f"del_{row['id']}"):
+                    supabase.table("portfolio").delete().eq("id", row['id']).execute()
+                    st.rerun()
+    else:
+        st.info("Your portfolio is empty. Add a stock above to get started!")
