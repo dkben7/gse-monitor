@@ -23,17 +23,15 @@ if 'username' not in st.session_state:
 if 'list_version' not in st.session_state:
     st.session_state.list_version = 0
 
-# --- 3. CLEAN DELETE CALLBACK ---
+# --- 3. DELETE CALLBACK ---
 def handle_user_deletion(username_to_del):
     try:
-        # We perform the delete inside a try block to catch any DB issues
         supabase.table("portfolio").delete().eq("username", username_to_del).execute()
         supabase.table("users").delete().eq("username", username_to_del).execute()
         st.session_state.list_version += 1
         st.toast(f"✅ User '{username_to_del}' removed.")
     except Exception:
-        # If something fails, show a friendly message instead of a crash
-        st.error("⚠️ Could not delete user. Please try again later.")
+        st.error("⚠️ Could not delete user.")
 
 # --- LOGIN / REGISTRATION ---
 if not st.session_state.logged_in:
@@ -55,19 +53,45 @@ if not st.session_state.logged_in:
 
     with tab2:
         with st.form("reg_form", clear_on_submit=True):
+            st.write("### Personal Information")
+            col1, col2 = st.columns(2)
+            f_name = col1.text_input("First Name")
+            l_name = col2.text_input("Last Name")
+            
+            o_name = st.text_input("Other Name (Optional)")
+            
+            col3, col4 = st.columns(2)
+            dob = col3.date_input("Date of Birth", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
+            email = col4.text_input("Email Address")
+            
+            st.divider()
+            st.write("### Account Credentials")
             new_u = st.text_input("New Username").lower().strip()
             new_p = st.text_input("New Password", type="password")
+            
             if st.form_submit_button("Register"):
-                if not new_u or not new_p:
-                    st.warning("Please fill in both fields.")
+                # Basic Validation
+                if not (f_name and l_name and email and new_u and new_p):
+                    st.warning("Please fill in all required fields.")
                 else:
                     try:
-                        # Attempt to register
-                        supabase.table("users").insert({"username": new_u, "password": make_hashes(new_p)}).execute()
-                        st.success("🎉 Account created! You can now switch to the Login tab.")
-                    except Exception:
-                        # This catches duplicate usernames or DB connection issues
-                        st.error("🚫 That username is already taken. Please try a different one.")
+                        # Prepare data for Supabase
+                        user_data = {
+                            "username": new_u,
+                            "password": make_hashes(new_p),
+                            "first_name": f_name,
+                            "last_name": l_name,
+                            "other_name": o_name if o_name else None,
+                            "dob": str(dob),
+                            "email": email
+                        }
+                        supabase.table("users").insert(user_data).execute()
+                        st.success("🎉 Account created! Please log in.")
+                    except Exception as e:
+                        if "duplicate key" in str(e).lower():
+                            st.error("🚫 Username or Email already exists.")
+                        else:
+                            st.error("🚫 Registration failed. Check your database schema.")
 
 # --- LOGGED IN CONTENT ---
 else:
@@ -81,33 +105,25 @@ else:
 
     if page == "Admin Panel" and is_admin:
         st.subheader("🛡️ Admin Control Panel")
-        user_res = supabase.table("users").select("username, created_at, last_login").execute()
+        # Fetching more columns now
+        user_res = supabase.table("users").select("*").execute()
         user_df = pd.DataFrame(user_res.data)
 
         if not user_df.empty:
-            h = st.columns([2, 2, 2, 1])
-            h[0].write("**Username**"); h[1].write("**Joined**"); h[2].write("**Last Login**"); h[3].write("**Action**")
-            st.divider()
-
+            # Expanded View for Admin
             for i, row in user_df.iterrows():
-                c = st.columns([2, 2, 2, 1])
-                c[0].write(row['username'])
-                c[1].write(pd.to_datetime(row['created_at']).strftime('%Y-%m-%d'))
-                last = pd.to_datetime(row['last_login']).strftime('%b %d, %H:%M') if row['last_login'] else "Never"
-                c[2].write(last)
-                
-                if row['username'] != "admin":
-                    v = st.session_state.list_version
-                    with c[3].popover("🗑️", key=f"pop_{row['username']}_{v}"):
-                        st.write(f"Permanently delete **{row['username']}**?")
-                        st.button(
-                            "Confirm Delete", 
-                            key=f"btn_{row['username']}_{v}", 
-                            on_click=handle_user_deletion, 
-                            args=(row['username'],),
-                            type="primary" # Makes the button red/prominent
-                        )
-                else:
-                    c[3].write("👑")
+                with st.expander(f"👤 {row['first_name']} {row['last_name']} (@{row['username']})"):
+                    c1, c2 = st.columns(2)
+                    c1.write(f"**Email:** {row['email']}")
+                    c1.write(f"**DOB:** {row['dob']}")
+                    c2.write(f"**Joined:** {pd.to_datetime(row['created_at']).strftime('%Y-%m-%d')}")
+                    
+                    if row['username'] != "admin":
+                        v = st.session_state.list_version
+                        if st.button(f"🗑️ Delete {row['username']}", key=f"del_{row['username']}_{v}"):
+                            handle_user_deletion(row['username'])
+                            st.rerun()
+        else:
+            st.write("No users found.")
     else:
         st.write("### 📈 Portfolio Content")
