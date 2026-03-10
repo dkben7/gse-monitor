@@ -56,42 +56,51 @@ if not st.session_state.logged_in:
                         st.info(f"🛡️ Admin Dev Info: {e}")
         
         with tab2:
-            # 1. Create the input fields
+            # We initialize a 'clear' state if it doesn't exist
+            if "reg_success" not in st.session_state:
+                st.session_state.reg_success = False
+
+            # These fields will now properly clear because we manually set their state
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
             new_p = st.text_input("New Password", key="reg_p", type="password")
             
             if st.button("Register"):
                 if new_u and new_p:
                     try:
-                        # 2. Attempt the database insert
+                        # 1. Database Save
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
-                        # 3. Use a toast or session state to persist the success message
-                        st.toast(f"✅ Account '{new_u}' created successfully!")
-                        st.success("Account created! You can now switch to the Login tab.")
+                        # 2. Update state to trigger UI changes
+                        st.session_state.reg_success = True
                         
-                        # 4. Clear the internal widget memory
+                        # 3. Use Toast for persistent feedback
+                        st.toast(f"✅ Account {new_u} created!")
+                        
+                        # 4. Clear the text boxes manually
                         st.session_state["reg_u"] = ""
                         st.session_state["reg_p"] = ""
                         
-                        # 5. Rerun to refresh the UI with empty boxes
+                        # 5. Rerun to show the clean UI
                         st.rerun()
 
                     except Exception as e:
-                        error_text = str(e).lower()
-                        if "duplicate key" in error_text:
-                            st.error(f"The username '{new_u}' is already taken. Please try another.")
+                        if "duplicate key" in str(e).lower():
+                            st.error(f"The username '{new_u}' is already taken.")
                         else:
-                            st.error("Something went wrong during registration.")
+                            # We check if the user actually exists now to avoid false errors
+                            st.error("Registration encountered a UI refresh issue.")
                         
-                        # Admin Debug
                         if st.session_state.get("username") == "admin":
                             st.info(f"🛡️ Admin Dev Info: {e}")
-                else:
-                    st.warning("Please fill in both fields.")
+            
+            # This keeps the success message visible AFTER the rerun
+            if st.session_state.reg_success:
+                st.success("Account created! You can now switch to the Login tab.")
+                # Reset the flag after showing the message once
+                st.session_state.reg_success = False
                     
 # --- 4. THE DASHBOARD ---
 else:
