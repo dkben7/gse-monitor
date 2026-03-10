@@ -34,8 +34,10 @@ if not st.session_state.logged_in:
             try:
                 res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
                 if res.data:
+                    # Update Last Login Timestamp
                     now = datetime.datetime.now().isoformat()
                     supabase.table("users").update({"last_login": now}).eq("username", u).execute()
+                    
                     st.session_state.logged_in = True
                     st.session_state.username = u
                     st.rerun()
@@ -45,6 +47,7 @@ if not st.session_state.logged_in:
                 st.error("Login service unavailable.")
 
     with tab2:
+        # st.form handles UI clearing automatically without errors
         with st.form("registration_form", clear_on_submit=True):
             st.write("### Create a New Account")
             new_u = st.text_input("New Username").lower().strip()
@@ -54,14 +57,17 @@ if not st.session_state.logged_in:
         if submit_reg:
             if new_u and new_p:
                 try:
-                    supabase.table("users").insert({"username": new_u, "password": make_hashes(new_p)}).execute()
+                    supabase.table("users").insert({
+                        "username": new_u, 
+                        "password": make_hashes(new_p)
+                    }).execute()
                     st.success(f"Account '{new_u}' created! You can now log in.")
                     st.balloons()
                 except Exception as e:
                     if "duplicate key" in str(e).lower():
                         st.error("That username is already taken.")
                     else:
-                        st.error("Registration failed.")
+                        st.error("Registration failed. Please try again.")
             else:
                 st.warning("Please fill in both fields.")
 
@@ -69,6 +75,7 @@ if not st.session_state.logged_in:
 else:
     is_admin = (st.session_state.username == "admin")
     
+    # Sidebar Navigation
     st.sidebar.title(f"👋 Welcome, {st.session_state.username}")
     menu = ["My Portfolio"]
     if is_admin:
@@ -90,7 +97,7 @@ else:
         if not user_df.empty:
             st.metric("Total Members", len(user_df))
             
-            # DEFINING THE HEADER COLUMNS (Fixes the NameError)
+            # Header Columns (Fixes NameError: h1, h2 not defined)
             h1, h2, h3, h4 = st.columns([2, 2, 2, 1])
             h1.write("**Username**")
             h2.write("**Joined**")
@@ -102,6 +109,7 @@ else:
                 c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
                 c1.write(f"**{row['username']}**")
                 
+                # Format dates safely
                 join_date = pd.to_datetime(row['created_at']).strftime('%Y-%m-%d')
                 last_seen = pd.to_datetime(row['last_login']).strftime('%b %d, %H:%M') if pd.notnull(row['last_login']) else "Never"
                 
@@ -111,7 +119,9 @@ else:
                 if row['username'] != "admin":
                     if c4.button("🗑️", key=f"del_{row['username']}"):
                         try:
+                            # 1. Clear user portfolio (Foreign Key safety)
                             supabase.table("portfolio").delete().eq("username", row['username']).execute()
+                            # 2. Delete user
                             supabase.table("users").delete().eq("username", row['username']).execute()
                             st.success(f"User {row['username']} deleted.")
                             st.rerun()
@@ -126,6 +136,9 @@ else:
     else:
         st.title("📈 My Portfolio")
         
+        with st.expander("🔑 Forgot Password?"):
+            st.info("Password resets are handled manually. Contact the administrator.")
+
         with st.expander("➕ Add Transaction"):
             c1, c2, c3 = st.columns(3)
             tick = c1.text_input("Ticker").upper().strip()
@@ -135,5 +148,33 @@ else:
             if st.button("Save Transaction"):
                 if tick:
                     try:
+                        # Fixed SyntaxError: Properly closed dictionary
                         supabase.table("portfolio").insert({
-                            "username": st.session_state.username
+                            "username": st.session_state.username, 
+                            "ticker": tick, 
+                            "shares": sh, 
+                            "change": ch
+                        }).execute()
+                        st.success(f"Added {tick}!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Unable to save transaction.")
+                else:
+                    st.warning("Please enter a Ticker.")
+
+        # Display Portfolio Table
+        res = supabase.table("portfolio").select("*").eq("username", st.session_state.username).execute()
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            st.divider()
+            for i, row in df.iterrows():
+                cols = st.columns([4, 2, 1])
+                cols[0].write(f"**{row['ticker']}** | {row['shares']:,} sh")
+                clr = "green" if row['change'] > 0 else "red"
+                cols[1].write(f":{clr}[{row['change']:+.2f}%]")
+                if cols[2].button("🗑️", key=f"p_{row['id']}"):
+                    try:
+                        supabase.table("portfolio").delete().eq("id", row['id']).execute()
+                        st.rerun()
+                    except Exception as e:
+                        st.error("Could not delete stock.")
