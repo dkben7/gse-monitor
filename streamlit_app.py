@@ -51,30 +51,33 @@ if not st.session_state.logged_in:
             if st.button("Register"):
                 if new_u and new_p:
                     try:
-                        # Attempt the database insert
+                        # Attempt to insert the new user
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
-                        # If successful, clear the fields and congratulate them
+                        # Clear inputs and show success
                         st.session_state["reg_u"] = ""
                         st.session_state["reg_p"] = ""
-                        st.success(f"Welcome aboard, {new_u.title()}! Your account is ready. Please switch to the Login tab.")
-                        
+                        st.success(f"Account for '{new_u}' created! You can now switch to the Login tab.")
+                        st.rerun()
+
                     except Exception as e:
-                        # We turn the technical error into a string to check it
-                        error_text = str(e).lower()
+                        # 1. Check for the most common user error (Duplicate Username)
+                        if "duplicate key" in str(e).lower():
+                            st.error(f"The username '{new_u}' is already taken. Please try another.")
                         
-                        if "duplicate key" in error_text:
-                            st.error(f"The username '{new_u}' is already in use. Please try a different one.")
-                        elif "connection" in error_text:
-                            st.error("We are having trouble reaching the server. Please check your internet.")
+                        # 2. General user-friendly error for everyone else
                         else:
-                            # This is a generic 'safe' message for everything else
-                            st.error("Something went wrong during registration. Please try again in a moment.")
+                            st.error("Something went wrong during registration. Please try again later.")
+                        
+                        # 3. ADMIN DEBUG LOGIC
+                        # We use .get() to avoid errors if 'username' isn't set yet
+                        if st.session_state.get("username") == "admin":
+                            st.info(f"🛡️ Admin Dev Info: {e}")
                 else:
-                    st.warning("Please enter both a username and password to create an account.")
+                    st.warning("Please fill in both fields to register.")
 
 # --- 4. THE DASHBOARD ---
 else:
