@@ -54,15 +54,23 @@ if not st.session_state.logged_in:
     with tab2:
         with st.form("reg_form", clear_on_submit=True):
             st.write("### Personal Information")
-            col1, col2 = st.columns(2)
-            f_name = col1.text_input("First Name")
-            l_name = col2.text_input("Last Name")
+            col_fn, col_ln = st.columns(2)
+            f_name = col_fn.text_input("First Name")
+            l_name = col_ln.text_input("Last Name")
             
             o_name = st.text_input("Other Name (Optional)")
             
-            col3, col4 = st.columns(2)
-            dob = col3.date_input("Date of Birth", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
-            email = col4.text_input("Email Address")
+            col_dob, col_em = st.columns(2)
+            dob = col_dob.date_input("Date of Birth", min_value=datetime.date(1920, 1, 1), max_value=datetime.date.today())
+            email = col_em.text_input("Email Address")
+
+            # --- Phone Number Section ---
+            st.write("### Contact Details")
+            col_cc, col_ph = st.columns([1, 2])
+            # Common country codes - you can add more to this list
+            country_codes = ["+233 (GH)", "+36 (HU)", "+1 (US)", "+44 (UK)", "+234 (NG)", "+254 (KE)"]
+            c_code = col_cc.selectbox("Code", country_codes)
+            phone = col_ph.text_input("Phone Number")
             
             st.divider()
             st.write("### Account Credentials")
@@ -70,12 +78,14 @@ if not st.session_state.logged_in:
             new_p = st.text_input("New Password", type="password")
             
             if st.form_submit_button("Register"):
-                # Basic Validation
-                if not (f_name and l_name and email and new_u and new_p):
-                    st.warning("Please fill in all required fields.")
+                # "Other Name" is the ONLY optional field now
+                required_fields = [f_name, l_name, email, phone, new_u, new_p]
+                
+                if not all(required_fields):
+                    st.warning("Please fill in all required fields (Only 'Other Name' is optional).")
                 else:
                     try:
-                        # Prepare data for Supabase
+                        full_phone = f"{c_code} {phone}"
                         user_data = {
                             "username": new_u,
                             "password": make_hashes(new_p),
@@ -83,15 +93,16 @@ if not st.session_state.logged_in:
                             "last_name": l_name,
                             "other_name": o_name if o_name else None,
                             "dob": str(dob),
-                            "email": email
+                            "email": email,
+                            "phone_number": full_phone
                         }
                         supabase.table("users").insert(user_data).execute()
-                        st.success("🎉 Account created! Please log in.")
+                        st.success("🎉 Account created! Log in to continue.")
                     except Exception as e:
                         if "duplicate key" in str(e).lower():
-                            st.error("🚫 Username or Email already exists.")
+                            st.error("🚫 Username, Email, or Phone already exists.")
                         else:
-                            st.error("🚫 Registration failed. Check your database schema.")
+                            st.error("🚫 Registration failed. Check database columns.")
 
 # --- LOGGED IN CONTENT ---
 else:
@@ -105,17 +116,21 @@ else:
 
     if page == "Admin Panel" and is_admin:
         st.subheader("🛡️ Admin Control Panel")
-        # Fetching more columns now
         user_res = supabase.table("users").select("*").execute()
         user_df = pd.DataFrame(user_res.data)
 
         if not user_df.empty:
-            # Expanded View for Admin
             for i, row in user_df.iterrows():
-                with st.expander(f"👤 {row['first_name']} {row['last_name']} (@{row['username']})"):
+                # Display all new info in the admin expander
+                display_name = f"{row['first_name']} {row['last_name']}"
+                if row['other_name']:
+                    display_name = f"{row['first_name']} {row['other_name']} {row['last_name']}"
+                
+                with st.expander(f"👤 {display_name} (@{row['username']})"):
                     c1, c2 = st.columns(2)
                     c1.write(f"**Email:** {row['email']}")
-                    c1.write(f"**DOB:** {row['dob']}")
+                    c1.write(f"**Phone:** {row['phone_number']}")
+                    c2.write(f"**DOB:** {row['dob']}")
                     c2.write(f"**Joined:** {pd.to_datetime(row['created_at']).strftime('%Y-%m-%d')}")
                     
                     if row['username'] != "admin":
