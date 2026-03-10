@@ -51,26 +51,30 @@ if not st.session_state.logged_in:
             if st.button("Register"):
                 if new_u and new_p:
                     try:
-                        # Attempt to save to Supabase
+                        # Attempt the database insert
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
                         
-                        # Clear inputs on success
+                        # If successful, clear the fields and congratulate them
                         st.session_state["reg_u"] = ""
                         st.session_state["reg_p"] = ""
-                        st.success(f"Account for '{new_u}' created! Switch to the Login tab.")
+                        st.success(f"Welcome aboard, {new_u.title()}! Your account is ready. Please switch to the Login tab.")
                         
                     except Exception as e:
-                        # Check if the error message contains 'duplicate key'
-                        if "duplicate key" in str(e).lower():
-                            st.error(f"The username '{new_u}' is already taken. Please pick another.")
+                        # We turn the technical error into a string to check it
+                        error_text = str(e).lower()
+                        
+                        if "duplicate key" in error_text:
+                            st.error(f"The username '{new_u}' is already in use. Please try a different one.")
+                        elif "connection" in error_text:
+                            st.error("We are having trouble reaching the server. Please check your internet.")
                         else:
-                            # Catch-all for other errors (like no internet)
-                            st.error("Something went wrong with the database. Please try again later.")
+                            # This is a generic 'safe' message for everything else
+                            st.error("Something went wrong during registration. Please try again in a moment.")
                 else:
-                    st.warning("Please enter both a username and a password.")
+                    st.warning("Please enter both a username and password to create an account.")
 
 # --- 4. THE DASHBOARD ---
 else:
