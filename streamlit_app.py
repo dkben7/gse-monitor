@@ -1,65 +1,94 @@
 import streamlit as st
 import pandas as pd
 
-# Page Config
-st.set_page_config(page_title="GSE Portfolio Monitor", layout="wide")
-st.title("🇬🇭 GSE Smart Monitor")
+# 1. Professional Page Config
+st.set_page_config(page_title="GSE Intelligence", page_icon="📈", layout="wide")
 
-# --- SETTINGS ---
-# Replace this with your actual Sheet ID
-SHEET_ID = "1_x73bJfJEJJGTZFsB1rzzM2oz0Yrxe5ViHQVvLhmEek" 
+# Custom CSS for a cleaner look
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    div[data-testid="stExpander"] { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_index=True)
 
+st.title("📊 GSE Smart Intelligence")
+st.caption("Real-time Portfolio Analysis & Dividend Tracking")
+
+# --- SETTINGS (Keep your existing ID) ---
+SHEET_ID = "YOUR_SHEET_ID_HERE" 
 PORTFOLIO_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Portfolio"
 DIVIDENDS_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Dividends"
 
 @st.cache_data(ttl=300)
 def get_data():
-    # Load Data
     p_df = pd.read_csv(PORTFOLIO_URL)
     d_df = pd.read_csv(DIVIDENDS_URL)
-    
-    # Standardize column names (lowercase and strip spaces)
     p_df.columns = p_df.columns.str.lower().str.strip()
     d_df.columns = d_df.columns.str.lower().str.strip()
     
-    # CLEANING LOGIC: Fix the brackets in the 3rd column (Index 2)
+    # Cleaning Logic
     p_df['clean_change'] = p_df.iloc[:, 2].astype(str).str.replace('(', '-', regex=False).str.replace(')', '', regex=False)
     p_df['clean_change'] = pd.to_numeric(p_df['clean_change'], errors='coerce').fillna(0)
-    
     return p_df, d_df
 
 try:
     portfolio, dividends = get_data()
 
-    # 1. Metrics Row (Total Dividends)
-    # Checks for 'dividend received' in lowercase
+    # --- TOP METRICS ROW ---
+    m1, m2, m3 = st.columns(3)
+    
     if 'dividend received' in dividends.columns:
-        total_div_ghs = dividends['dividend received'].sum()
-        st.metric("Total Dividends (GHS)", f"GH₵ {total_div_ghs:,.2f}")
-    else:
-        st.warning("Column 'dividend received' not found in Dividends sheet.")
+        total_div = dividends['dividend received'].sum()
+        m1.metric("Total Dividends Earned", f"GH₵ {total_div:,.2f}", delta="Annual Total")
+    
+    # Calculate Portfolio Health
+    up_tickers = len(portfolio[portfolio['clean_change'] > 0])
+    m2.metric("Market Sentiment", f"{up_tickers} Stocks UP", delta=f"{len(portfolio)} Total Watchlist")
+    
+    m3.metric("Status", "Operational", delta="Live Connection", delta_color="normal")
 
-    # 2. Main Dashboard Columns
-    col1, col2, col3 = st.columns(3)
+    st.divider()
+
+    # --- MAIN CONTENT ---
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("🚀 Top Gainers")
-        # Fixed the bracket syntax here
-        gainers = portfolio[portfolio['clean_change'] > 0].nlargest(5, 'clean_change')
-        st.dataframe(gainers[['ticker', 'clean_change']], hide_index=True)
+        with st.container(border=True):
+            st.subheader("🚀 Top Performers")
+            gainers = portfolio[portfolio['clean_change'] > 0].nlargest(5, 'clean_change')
+            # Using column_config to add mini progress bars or colors
+            st.dataframe(
+                gainers[['ticker', 'clean_change']],
+                column_config={
+                    "ticker": "Stock Ticker",
+                    "clean_change": st.column_config.NumberColumn("Daily Change", format="+%.2f")
+                },
+                hide_index=True,
+                use_container_width=True
+            )
 
     with col2:
-        st.subheader("📉 Top Losers")
-        # Logic: Find numbers less than 0
-        losers = portfolio[portfolio['clean_change'] < 0].nsmallest(5, 'clean_change')
-        st.dataframe(losers[['ticker', 'clean_change']], hide_index=True)
+        with st.container(border=True):
+            st.subheader("📉 Top Losers")
+            losers = portfolio[portfolio['clean_change'] < 0].nsmallest(5, 'clean_change')
+            st.dataframe(
+                losers[['ticker', 'clean_change']],
+                column_config={
+                    "ticker": "Stock Ticker",
+                    "clean_change": st.column_config.NumberColumn("Daily Change", format="%.2f")
+                },
+                hide_index=True,
+                use_container_width=True
+            )
 
-    with col3:
-        st.subheader("💰 Top Dividend Payers")
-        if 'stock' in dividends.columns and 'dividend received' in dividends.columns:
-            top_divs = dividends.groupby('stock')['dividend received'].sum().nlargest(5).reset_index()
-            st.dataframe(top_divs, hide_index=True)
+    # --- DIVIDEND SECTION ---
+    st.subheader("💰 Dividend Cashflow Leaderboard")
+    if 'stock' in dividends.columns:
+        top_divs = dividends.groupby('stock')['dividend received'].sum().nlargest(8).reset_index()
+        st.bar_chart(data=top_divs, x='stock', y='dividend received', color="#2ecc71")
 
 except Exception as e:
-    st.error("Connection Error. Check your Sheet ID and Permissions.")
-    st.write(f"Details: {e}")
+    st.error("Authentication Error. Check Sheet Permissions.")
+    st.write(f"Tech Details: {e}")
