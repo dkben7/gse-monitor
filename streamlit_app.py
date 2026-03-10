@@ -47,25 +47,27 @@ if not st.session_state.logged_in:
                     st.error("Invalid credentials.")
         
         with tab2:
-            # We add an on_change to clear messages when the user types
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
             new_p = st.text_input("New Password", type="password", key="reg_p")
             
             if st.button("Register"):
-                if not new_u or not new_p:
-                    st.warning("Please fill in both fields.")
+                if new_u and new_p:
+                    try:
+                        # Ensure there is a COMMA after new_u, not a semicolon
+                        supabase.table("users").insert({
+                            "username": new_u, 
+                            "password": make_hashes(new_p)
+                        }).execute()
+                        
+                        st.session_state["reg_u"] = ""
+                        st.session_state["reg_p"] = ""
+                        st.success(f"Welcome {new_u}! Account created. Now switch to Login.")
+                        st.rerun()
+                    except Exception as e:
+                        # This will show the actual error if it fails again
+                        st.error(f"Error: {e}")
                 else:
-                    # Check if username exists before trying to insert
-                    check = supabase.table("users").select("username").eq("username", new_u).execute()
-                    
-                    if len(check.data) > 0:
-                        st.error(f"Username '{new_u}' is already taken. Please try another.")
-                    else:
-                        try:
-                            supabase.table("users").insert({
-                                "username": new_u, 
-                                "password": make_hashes(new_p)
-                            }).execute()
+                    st.warning("Please fill in both fields.")
                             
                             # Success! Clear the session state
                             st.session_state["reg_u"] = ""
