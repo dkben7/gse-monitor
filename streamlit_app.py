@@ -47,21 +47,30 @@ if not st.session_state.logged_in:
         with tab2:
             new_u = st.text_input("New Username", key="reg_u").lower().strip()
             new_p = st.text_input("New Password", type="password", key="reg_p")
+            
             if st.button("Register"):
                 if new_u and new_p:
                     try:
+                        # Attempt to save to Supabase
                         supabase.table("users").insert({
                             "username": new_u, 
                             "password": make_hashes(new_p)
                         }).execute()
+                        
+                        # Clear inputs on success
                         st.session_state["reg_u"] = ""
                         st.session_state["reg_p"] = ""
-                        st.success("Success! Account created. Now switch to Login.")
-                        st.rerun()
+                        st.success(f"Account for '{new_u}' created! Switch to the Login tab.")
+                        
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        # Check if the error message contains 'duplicate key'
+                        if "duplicate key" in str(e).lower():
+                            st.error(f"The username '{new_u}' is already taken. Please pick another.")
+                        else:
+                            # Catch-all for other errors (like no internet)
+                            st.error("Something went wrong with the database. Please try again later.")
                 else:
-                    st.warning("Please fill in both fields.")
+                    st.warning("Please enter both a username and a password.")
 
 # --- 4. THE DASHBOARD ---
 else:
