@@ -12,18 +12,22 @@ supabase: Client = create_client(url, key)
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- 2. THE FIX: DELETE CALLBACK ---
-def delete_user_permanently(target_user):
-    # 1. Clear portfolio first
-    supabase.table("portfolio").delete().eq("username", target_user).execute()
-    # 2. Delete user
-    supabase.table("users").delete().eq("username", target_user).execute()
-    # 3. Success message
-    st.toast(f"User {target_user} deleted successfully.")
-    # 4. FORCE REFRESH to kill the popover state
+# --- THE FIX: ACTION CALLBACKS ---
+def handle_user_deletion(username_to_del):
+    """Deletes user data and forces a clean UI refresh to close popovers."""
+    try:
+        # Delete related portfolio first (Supabase Foreign Key safety)
+        supabase.table("portfolio").delete().eq("username", username_to_del).execute()
+        # Delete the user
+        supabase.table("users").delete().eq("username", username_to_del).execute()
+        # Success Toast
+        st.toast(f"Successfully deleted {username_to_del}")
+    except Exception as e:
+        st.error(f"Error deleting user: {e}")
+    # This is the magic line that kills the lingering prompt:
     st.rerun()
 
-# 3. Page Config
+# 2. Page Config
 st.set_page_config(page_title="GSE Intelligence", page_icon="🏦")
 st.title("🏦 GSE Intelligence")
 
@@ -47,7 +51,7 @@ if not st.session_state.logged_in:
                 st.session_state.username = u
                 st.rerun()
             else:
-                st.error("Invalid Credentials")
+                st.error("Invalid credentials")
     with tab2:
         with st.form("reg_form", clear_on_submit=True):
             new_u = st.text_input("New Username").lower().strip()
@@ -55,10 +59,48 @@ if not st.session_state.logged_in:
             if st.form_submit_button("Register"):
                 if new_u and new_p:
                     supabase.table("users").insert({"username": new_u, "password": make_hashes(new_p)}).execute()
-                    st.success("User Registered!")
+                    st.success("Account created!")
 
 # --- LOGGED IN CONTENT ---
 else:
     is_admin = (st.session_state.username == "admin")
     st.sidebar.title(f"👋 {st.session_state.username}")
-    menu = ["My Portfolio", "Admin Panel"] if is
+    menu = ["My Portfolio", "Admin Panel"] if is_admin else ["My Portfolio"]
+    page = st.sidebar.radio("Navigation", menu)
+    
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    if page == "Admin Panel" and is_admin:
+        st.subheader("🛡️ Admin Control Panel")
+        user_res = supabase.table("users").select("username, created_at, last_login").execute()
+        user_df = pd.DataFrame(user_res.data)
+
+        if not user_df.empty:
+            h1, h2, h3, h4 = st.columns([2, 2, 2, 1])
+            h1.write("**Username**"); h2.write("**Joined**"); h3.write("**Last Login**"); h4.write("**Action**")
+            st.divider()
+
+            for i, row in user_df.iterrows():
+                c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+                c1.write(row['username'])
+                c2.write(pd.to_datetime(row['created_at']).strftime('%Y-%m-%d'))
+                last = pd.to_datetime(row['last_login']).strftime('%b %d, %H:%M') if row['last_login'] else "Never"
+                c3.write(last)
+                
+                if row['username'] != "admin":
+                    # Confirmation Popover
+                    with c4.popover("🗑️"):
+                        st.write(f"Delete **{row['username']}**?")
+                        # We use on_click to trigger the function ABOVE
+                        st.button(
+                            "Yes, delete", 
+                            key=f"confirm_{row['username']}", 
+                            on_click=handle_user_deletion, 
+                            args=(row['username'],)
+                        )
+                else:
+                    c4.write("👑")
+    else:
+        st.write("### 📈 Portfolio Content Here")
