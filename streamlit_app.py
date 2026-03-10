@@ -12,22 +12,7 @@ supabase: Client = create_client(url, key)
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
-# --- THE FIX: ACTION CALLBACKS ---
-def handle_user_deletion(username_to_del):
-    """Deletes user data and forces a clean UI refresh to close popovers."""
-    try:
-        # Delete related portfolio first (Supabase Foreign Key safety)
-        supabase.table("portfolio").delete().eq("username", username_to_del).execute()
-        # Delete the user
-        supabase.table("users").delete().eq("username", username_to_del).execute()
-        # Success Toast
-        st.toast(f"Successfully deleted {username_to_del}")
-    except Exception as e:
-        st.error(f"Error deleting user: {e}")
-    # This is the magic line that kills the lingering prompt:
-    st.rerun()
-
-# 2. Page Config
+# 2. Page Config & State Initialization
 st.set_page_config(page_title="GSE Intelligence", page_icon="🏦")
 st.title("🏦 GSE Intelligence")
 
@@ -35,6 +20,20 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'username' not in st.session_state:
     st.session_state.username = None
+# This version key is the secret to closing the popover
+if 'list_version' not in st.session_state:
+    st.session_state.list_version = 0
+
+# --- 3. THE FIX: CALLBACK WITH VERSION INCREMENT ---
+def handle_user_deletion(username_to_del):
+    try:
+        supabase.table("portfolio").delete().eq("username", username_to_del).execute()
+        supabase.table("users").delete().eq("username", username_to_del).execute()
+        # Increment version to force-reset all widget states
+        st.session_state.list_version += 1
+        st.toast(f"Deleted {username_to_del}")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 # --- LOGIN / REGISTRATION ---
 if not st.session_state.logged_in:
@@ -65,8 +64,7 @@ if not st.session_state.logged_in:
 else:
     is_admin = (st.session_state.username == "admin")
     st.sidebar.title(f"👋 {st.session_state.username}")
-    menu = ["My Portfolio", "Admin Panel"] if is_admin else ["My Portfolio"]
-    page = st.sidebar.radio("Navigation", menu)
+    page = st.sidebar.radio("Navigation", ["My Portfolio", "Admin Panel"] if is_admin else ["My Portfolio"])
     
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
@@ -90,17 +88,17 @@ else:
                 c3.write(last)
                 
                 if row['username'] != "admin":
-                    # Confirmation Popover
-                    with c4.popover("🗑️"):
+                    # We add the list_version to the popover and button keys
+                    v = st.session_state.list_version
+                    with c4.popover("🗑️", key=f"pop_{row['username']}_{v}"):
                         st.write(f"Delete **{row['username']}**?")
-                        # We use on_click to trigger the function ABOVE
                         st.button(
                             "Yes, delete", 
-                            key=f"confirm_{row['username']}", 
+                            key=f"btn_{row['username']}_{v}", 
                             on_click=handle_user_deletion, 
                             args=(row['username'],)
                         )
                 else:
                     c4.write("👑")
     else:
-        st.write("### 📈 Portfolio Content Here")
+        st.write("### 📈 Portfolio Content")
