@@ -1,93 +1,83 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Professional Page Config
-st.set_page_config(page_title="GSE Intelligence", page_icon="📈", layout="wide")
+# 1. Page Configuration
+st.set_page_config(page_title="GSE Intelligence Pro", page_icon="🏦", layout="wide")
 
-# Custom CSS for "Glass" Effect (Works in Dark and Light mode)
+# Custom Styling
 st.markdown("""
     <style>
     [data-testid="stMetric"] { 
         background-color: rgba(255, 255, 255, 0.05); 
-        padding: 20px; 
-        border-radius: 15px; 
+        padding: 20px; border-radius: 15px; 
         border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
     }
-    .stDataFrame { border-radius: 15px; overflow: hidden; }
-    h2, h3 { letter-spacing: -1px; }
+    .stSidebar { background-color: #0e1117; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 GSE Smart Intelligence")
-
-# --- SETTINGS (Keep your ID) ---
-SHEET_ID = "1_x73bJfJEJJGTZFsB1rzzM2oz0Yrxe5ViHQVvLhmEek" 
-BASE_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv"
-
-@st.cache_data(ttl=60)
-def get_data(sheet_name):
-    url = f"{BASE_URL}&sheet={sheet_name}"
-    return pd.read_csv(url)
-
-try:
-    portfolio = get_data("Portfolio")
-    dividends = get_data("Dividends")
+# --- SIDEBAR: USER INPUT & AUTH ---
+with st.sidebar:
+    st.title("Settings")
+    user_password = st.text_input("Enter App Password", type="password")
     
-    portfolio.columns = portfolio.columns.str.lower().str.strip()
-    dividends.columns = dividends.columns.str.lower().str.strip()
-
-    # Cleaning Logic
-    portfolio['clean_change'] = portfolio.iloc[:, 2].astype(str).str.replace('(', '-', regex=False).str.replace(')', '', regex=False)
-    portfolio['clean_change'] = pd.to_numeric(portfolio['clean_change'], errors='coerce').fillna(0)
-
-    # --- TOP METRICS ROW ---
-    m1, m2, m3 = st.columns(3)
+    st.divider()
+    st.subheader("Connect Your Data")
+    # This allows any user to paste their own Sheet ID
+    target_id = st.text_input("Google Sheet ID", placeholder="Enter ID here...")
     
-    if 'dividend received' in dividends.columns:
-        total_div = dividends['dividend received'].sum()
-        m1.metric("Total Dividends", f"GH₵ {total_div:,.2f}")
-    
-    up_tickers = len(portfolio[portfolio['clean_change'] > 0])
-    m2.metric("Market Sentiment", f"{up_tickers} Stocks UP", delta=f"{up_tickers/len(portfolio):.0%}")
-    m3.metric("Status", "Live Feed", delta="Connected", delta_color="normal")
+    st.info("Ensure your Google Sheet is shared as 'Anyone with the link can view'.")
 
-    st.write("---")
+# --- MAIN APP LOGIC ---
+if user_password == "GSE2026":  # You can change this password
+    if target_id:
+        BASE_URL = f"https://docs.google.com/spreadsheets/d/{target_id}/gviz/tq?tqx=out:csv"
 
-    # --- MAIN CONTENT ---
-    col1, col2 = st.columns(2)
+        @st.cache_data(ttl=60)
+        def load_user_data(sheet_name):
+            return pd.read_csv(f"{BASE_URL}&sheet={sheet_name}")
 
-    with col1:
-        st.subheader("🚀 Top Performers")
-        gainers = portfolio[portfolio['clean_change'] > 0].nlargest(5, 'clean_change')
-        # Format the numbers to show decimals
-        st.dataframe(
-            gainers[['ticker', 'clean_change']], 
-            column_config={
-                "clean_change": st.column_config.NumberColumn("Change", format="%.2f")
-            },
-            hide_index=True, 
-            use_container_width=True
-        )
+        try:
+            # Loading data dynamically
+            portfolio = load_user_data("Portfolio")
+            dividends = load_user_data("Dividends")
+            
+            # Normalizing data
+            portfolio.columns = portfolio.columns.str.lower().str.strip()
+            dividends.columns = dividends.columns.str.lower().str.strip()
+            
+            # Cleaning Logic
+            portfolio['clean_change'] = portfolio.iloc[:, 2].astype(str).str.replace('(', '-', regex=False).str.replace(')', '', regex=False)
+            portfolio['clean_change'] = pd.to_numeric(portfolio['clean_change'], errors='coerce').fillna(0)
 
-    with col2:
-        st.subheader("📉 Top Losers")
-        losers = portfolio[portfolio['clean_change'] < 0].nsmallest(5, 'clean_change')
-        st.dataframe(
-            losers[['ticker', 'clean_change']], 
-            column_config={
-                "clean_change": st.column_config.NumberColumn("Change", format="%.2f")
-            },
-            hide_index=True, 
-            use_container_width=True
-        )
+            st.title("🏦 GSE Portfolio Intelligence")
+            
+            # Metrics
+            m1, m2, m3 = st.columns(3)
+            if 'dividend received' in dividends.columns:
+                m1.metric("Total Dividends", f"GH₵ {dividends['dividend received'].sum():,.2f}")
+            
+            m2.metric("Portfolio Health", f"{len(portfolio[portfolio['clean_change'] > 0])} Gainers")
+            m3.metric("System Status", "Encrypted", delta="Secure Session")
 
-    # --- BAR CHART ---
-    st.write("---")
-    st.subheader("💰 Dividend Income by Stock")
-    if 'stock' in dividends.columns:
-        top_divs = dividends.groupby('stock')['dividend received'].sum().sort_values(ascending=False).reset_index()
-        st.bar_chart(data=top_divs, x='stock', y='dividend received', color="#00ff88")
+            st.divider()
 
-except Exception as e:
-    st.error(f"⚠️ App Error: {e}")
+            # Dashboard Display
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("🚀 Top Performers")
+                st.dataframe(portfolio.nlargest(5, 'clean_change')[['ticker', 'clean_change']], hide_index=True, use_container_width=True)
+            
+            with c2:
+                st.subheader("📉 Top Losers")
+                st.dataframe(portfolio.nsmallest(5, 'clean_change')[['ticker', 'clean_change']], hide_index=True, use_container_width=True)
+
+        except Exception as e:
+            st.error("Invalid Sheet ID or Tab Names. Please check your Google Sheet settings.")
+    else:
+        st.warning("Please enter your Google Sheet ID in the sidebar to begin.")
+else:
+    if user_password:
+        st.error("Incorrect Password.")
+    else:
+        st.info("Welcome! Please enter the password in the sidebar to access the dashboard.")
