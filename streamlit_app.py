@@ -32,10 +32,9 @@ if not st.session_state.logged_in:
         
         if st.button("Sign In"):
             try:
-                # Select user where username and hashed password match
                 res = supabase.table("users").select("*").eq("username", u).eq("password", make_hashes(p)).execute()
                 if res.data:
-                    # Update Last Login Timestamp
+                    # Update Last Login
                     now = datetime.datetime.now().isoformat()
                     supabase.table("users").update({"last_login": now}).eq("username", u).execute()
                     
@@ -46,12 +45,9 @@ if not st.session_state.logged_in:
                     st.error("Invalid Username or Password")
             except Exception as e:
                 st.error("Login service unavailable.")
-                # Dev info only for the admin user (if they could log in)
-                if u == "admin":
-                    st.info(f"Dev Info: {e}")
 
     with tab2:
-        # Form handles the "clear_on_submit" automatically to reset boxes
+        # Form handles the "clear_on_submit" automatically
         with st.form("registration_form", clear_on_submit=True):
             st.write("### Create a New Account")
             new_u = st.text_input("New Username").lower().strip()
@@ -77,4 +73,27 @@ if not st.session_state.logged_in:
 
 # --- LOGGED IN CONTENT ---
 else:
-    is_admin = (st.session_state.
+    is_admin = (st.session_state.username == "admin")
+    
+    # Sidebar Navigation
+    st.sidebar.title(f"👋 Welcome, {st.session_state.username}")
+    menu = ["My Portfolio"]
+    if is_admin:
+        menu.append("Admin Panel")
+    
+    page = st.sidebar.radio("Navigation", menu)
+    
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = None
+        st.rerun()
+
+    # --- ADMIN PANEL ---
+    if page == "Admin Panel" and is_admin:
+        st.title("🛡️ Admin Control Panel")
+        user_res = supabase.table("users").select("username, created_at, last_login").execute()
+        user_df = pd.DataFrame(user_res.data)
+
+        if not user_df.empty:
+            st.metric("Total Members", len(user_df))
+            h1, h2
