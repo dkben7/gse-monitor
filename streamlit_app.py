@@ -8,10 +8,16 @@ st.set_page_config(page_title="GSE Intelligence", page_icon="📈", layout="wide
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    [data-testid="stMetric"] { 
+        background-color: #ffffff; 
+        padding: 15px; 
+        border-radius: 10px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+        border: 1px solid #eee;
+    }
     div[data-testid="stExpander"] { border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     </style>
-    """, unsafe_index=True)
+    """, unsafe_allow_html=True)
 
 st.title("📊 GSE Smart Intelligence")
 st.caption("Real-time Portfolio Analysis & Dividend Tracking")
